@@ -1,0 +1,1552 @@
+*Megha's Innovation Paper Do File
+
+
+
+/* Files, data cleaning, and original graphics creation from Opportunity Insights. Regression is originally programmed.  
+ 
+This do-file is a metafile for the do-files tabs_main.do, figs_main.do, 
+tabs_appendix.do and figs_appendix.do, which create the figures 
+in the main text and appendix of
+
+  - Bell, A., Chetty, R., Jaravel, X., Petkova, N. & Van Reenen, J. (2018). 
+		Who Becomes an Inventor in America?
+		The Importance of Exposure to Innovation
+		
+It defines several globals for file directories and must be run first.		
+*/
+
+* Choose figure file type
+global image_suffix "wmf"  // change to wmf or pdf if desired
+
+*************************************************************
+* Define convenient globals
+
+* Make sure extra title is included in Power point figs
+if "${image_suffix}" == "wmf" global title "title(" ")"
+else global title
+
+adopath ++ 	 	  "C:/Users/Megha/Desktop"
+global root 	  "C:/Users/Megha/Desktop/Working Directory/Final Checks"
+global code 	  "C:/Users/Megha/Desktop/patents_paper_code_and_data/code_and_data"
+global data 	  "C:/Users/Megha/Desktop/patents_paper_code_and_data/code_and_data/data (public online tables)/stata"
+global recordings "C:/Users/Megha/Desktop/Working Directory/recordings"
+global output 	  "C:/Users/Megha/Desktop/Working Directory/Final Submission Checks"
+global logs 	  "C:/Users/Megha/Desktop/Working Directory/Logs"
+global figs 	  "C:/Users/Megha/Desktop/Working Directory/Figs/${image_suffix}"  
+global tabs 	  "C:/Users/Megha/Desktop/Working Directory/Tabs/${output}/tables"  
+
+/* Requires maptile state and CZ geography, if not already installed*/
+ssc install maptile
+ssc install spmap
+maptile_install using "http://files.michaelstepner.com/geo_state.zip", replace
+maptile_install using "http://files.michaelstepner.com/geo_cz1990.zip", replace
+
+**************************************************************
+
+* Create main text tables
+*include "C:/Users/Megha/Desktop/patents_paper_code_and_data/code_and_data/code/tabs_main.do"
+* Create main text figures
+*include "C:/Users/Megha/Desktop/patents_paper_code_and_data/code_and_data/code/figs_main.do"
+* Create appendix tables
+*include "C:/Users/Megha/Desktop/patents_paper_code_and_data/code_and_data/code/tabs_appendix.do"
+* Create appendix figures
+*include "C:/Users/Megha/Desktop/patents_paper_code_and_data/code_and_data/code/figs_appendix.do"
+
+*Note that the codes used in this project are sourced mainly from Figs_main, and figs_appendix
+/*
+*** FIGURES IN MAIN TEXT
+* Fig 1: Patent rates vs. parent income percentile 
+use "${data}/inventor_on_par_inc8084.dta", clear
+replace inventor = inventor * 1000
+replace fcit_top5pc = fcit_top5pc * 1000
+
+* Fig 1a:  All Inventors by 2014
+twoway scatter inventor par_bin, mcolor(navy) ///
+	${title} msize(vsmall) ///
+	xtitle("Parent Household Income Percentile") ///
+		ytitle("Inventors per Thousand")
+graph export "${figs}/inventor_on_parinc.${image_suffix}", replace 		
+	
+* Fig 1b:  Highly-Cited Inventors
+twoway scatter fcit_top5pc par_bin, mcolor(navy)  ///
+	${title} msize(vsmall) ///
+	xtitle("Parent Household Income Percentile") ///
+	ytitle("Highly-Cited (Top 5%) Inventors per Thousand", margin(b-3)) ///
+	ylab(0 "0" .1 "0.1" .2 "0.2" .3 "0.3" .4 "0.4", gmax)
+graph export "${figs}/highly_cited_on_parinc.${image_suffix}", replace 
+
+
+* Fig 2: Patent rates by race and ethnicity, NYC
+use "${data}/race_reweighting.dta", clear
+
+gen sort = 1 if ethnicity == "White"
+replace sort = 2 if ethnicity == "Black"
+replace sort = 3 if ethnicity == "Hispanic"
+replace sort = 4 if ethnicity == "Asian"
+gen inv_1k_unweighted = inv_1k if weight=="none"
+gen inv_1k_math3 = inv_1k if weight=="math3"
+gen inv_1k_par_vin = inv_1k if weight=="par_vin"
+sort sort
+
+graph bar inv_1k_unweighted  inv_1k_par_vin inv_1k_math3, ///
+	over(ethnicity, sort(sort)) ///
+	bargap(10)  ///
+	legend(off) ///
+	ytitle("Inventors per Thousand") ///
+	${title} ///
+	blabel(bar, position(center) format(%12.1f) color(black)) ///
+	yscale(range(0 4)) ///
+	bar(1, color("255 229 204")) ///
+	bar(2, color("255 178 102"))  ///
+	bar(3, color("255 128 0"))
+
+graph export "${figs}/inventors_byrace.${image_suffix}", replace
+
+
+* Fig 3: Percentage of Female Inventors by Birth Cohort
+use "${data}/female_by_cohort.dta", clear
+
+keep if yob <=1980 & yob>=1940
+reg female yob, vce(r)
+local slope : di %3.2f _b[yob]
+local se : di %4.3f _se[yob]
+
+twoway (scatter  female yob) (lfit female yob, lcolor(maroon)), /// 
+	ylabel(0(10)50, gmax) ///
+	graphregion(fcolor(white)) ///
+	legend(off) ///
+	${title} ///
+	xtitle("Year of Birth") ///
+	ytitle("Percentage of Inventors who are Female ") ///
+	text( 35 1955 "Average Change per Year: `slope'%" "(`se')") 
+graph export "${figs}/female_inventors_bycohort.${image_suffix}", replace
+
+* Fig 4: Patent rates vs grade 3 math scores
+* Fig 4a: Patent rates vs grade 3 math scores, by parental income
+insheet using "${data}/nyc_inv_on_math3_bypar.csv", clear
+
+twoway (connected inv_1k_by1 math3_by1, mcolor(dkorange) lcolor(dkorange) msymbol(triangle)) ///
+(connected inv_1k_by2 math3_by2, mcolor(navy) lcolor(navy)), ///
+	graphregion(fcolor(white))  ///
+	legend(label(1 "Parent Income Below 80th Percentile")  /// 
+	label(2 "Parent Income Above 80th Percentile") /// 
+	pos(6) size(2.5)) ///
+	xtitle("3rd Grade Math Test Score (Standardized)") ///
+	ytitle("Inventors per Thousand") ///
+	${title} ///
+	text(6.5 0.9 "90th Percentile") ///
+	xscale(range(-2 2.5)) ///
+	yscale(range(0 8.05)) ///
+	xline(1.4, lpattern(dash) lc(maroon))
+
+graph export "${figs}/inventor_on_math3_byparinc.${image_suffix}", replace
+
+
+* Fig 4b: Patent rates vs test scores by race and ethnicity, NYC
+insheet using "${data}/nyc_inv_on_math3_byrace.csv", clear
+
+forval i = 1/4 {
+	replace inv_1k_by`i' = inv_1k_by`i' * 1000
+	}
+label variable math3_by1 "math3; ethn==Asian"
+label variable math3_by2 "math3; ethn==Black"
+label variable math3_by3 "math3; ethn==Hispanic"
+label variable math3_by4 "math3; ethn==White"
+label variable inv_1k_by1 "inv_1k; ethn==Asian"
+label variable inv_1k_by2 "inv_1k; ethn==Black"
+label variable inv_1k_by3 "inv_1k; ethn==Hispanic"
+label variable inv_1k_by4 "inv_1k; ethn==White"
+
+twoway (connected inv_1k_by1 math3_by1, msymbol(circle) mcolor(navy) lcolor(navy)) ///
+(connected inv_1k_by2 math3_by2, msymbol(diamond) mcolor(maroon) lcolor(maroon)) ///
+(connected inv_1k_by3 math3_by3, msymbol(triangle) mcolor(forest_green) lcolor(forest_green)) ///
+(connected inv_1k_by4 math3_by4, msymbol(square) mcolor(dkorange) lcolor(dkorange)) , ///
+	xtitle("3rd Grade Math Test Score (Standardized)") ///
+	ytitle("Inventors per Thousand") ///
+	${title} ///
+	text(6.5 0.9 "90th Percentile") ///
+	legend(order (3 2 4 1) label(4 "White") label(2 "Black") label(3 "Hispanic") label(1 "Asian") row(1)) ///
+	xline(1.4, lpattern(dash) lc(maroon)) ///
+	yscale(range(0 8.05)) ///
+	xscale(range(-2 2.5))
+graph export "${figs}/inventor_on_math3_byrace.${image_suffix}", replace
+	
+* Fig 4c: Patent rates vs test scores by gender, NYC
+use "${data}/gender3.dta", clear
+gen math = (math30*n0 + math31*n1) /(n0+n1)
+twoway (connected inv_1k1 math, mcolor(navy) lcolor(navy)) ///
+(connected inv_1k0 math,  mcolor(dkorange) lcolor(dkorange) msymbol(triangle)), ///
+	graphregion(fcolor(white))  ///
+	legend(label(1 "Male") label(2 "Female") ///
+	order(2 1)) ///
+	xtitle("3rd Grade Math Test Score (Standardized)") ///
+	ytitle("Inventors per Thousand") ///
+	${title} ///
+	text(6.5 0.8 "90th Percentile") ///
+	xscale(range(-2 2.5)) ///
+	yscale(range(0 8.05)) ylab(0 (2) 8) ///
+	xline(1.35, lpattern(dash) lc(maroon))
+graph export "${figs}/inventor_on_math3_bygender.${image_suffix}", replace
+
+* Fig 5: Pct. of Gap in Patent Rates for Low vs. High-Inc. Students Explained
+* by Test Scores in Grades 3-8
+local data_gap "${data}/p80"
+
+* Compute raw and reweighted means and gaps
+matrix gap_closed = J(6,1,.) // store fraction of gap closed at each grade
+forvalues grade = 3/8 {
+	* Load grade-specific data set
+	use "`data_gap'`grade'", clear
+	
+	* Raw means and gap
+	* Kids from high-income families
+	sum inv_1k1 [aw=n1]
+	local high_mean_`grade' = `r(mean)'
+	local N1				= `r(sum_w)' 	// # of kids from high-inc families
+	* Kids from low-income families
+	sum inv_1k0 [aw=n0]
+	local low_mean_`grade'  = `r(mean)'
+	local N0				= `r(sum_w)' 	// # of kids from low-inc families
+	* Gap
+	local diff_`grade'	= `high_mean_`grade''-`low_mean_`grade''
+	
+	* Reweighting the disadvantaged group
+	sum inv_1k0 [aw=n1]
+	local rw_low_mean_`grade' = `r(mean)'
+	* Gap
+	local rw_diff_`grade' 	  = `high_mean_`grade''-`rw_low_mean_`grade''
+	* Compute fraction of gap closed
+	local closed_`grade' = 1-`rw_diff_`grade'' / `diff_`grade''
+	matrix gap_closed[`grade'-2,1]  = `closed_`grade'' * 100
+}
+
+* Compute average pp change per grade
+clear
+svmat gap_closed
+gen grade = _n + 2
+regress gap_closed grade // robust standard errors are smaller
+local slope : di %3.2f _b[grade]
+local se : di %3.2f _se[grade]
+
+* Scatter plot
+twoway (scatter gap_closed grade) ///
+(lfit gap_closed grade), ///
+	xtitle("Grade") ///
+	ytitle("Percent of Gap Explained by Math Test Scores") ///
+	text(31.5 7.4 "Slope: `slope'%" ///
+	"        (`se')") ///
+	ylab(30(5)50) ///
+	${title} ///
+	legend(off)
+graph export "${figs}/pct_gap_explained_by_math_scores.${image_suffix}", replace
+
+/* Fig 6: Patent rates and college attended
+Note: Sample is birth cohorts 1980-84 matched to a college based on college
+most attended at age 19-22. */
+
+* Fig 6a: Top 10 colleges for Patent Rates (note: this dataset is one of the online tables)
+use "${data}/patents_by_college.dta", clear
+* Keep 10 large colleges with highest share of inventors
+keep if count >= 2500
+gsort -inventor
+keep if _n <= 10
+replace inventor=inventor * 1000
+replace instnm = subinstr(instnm,"O","o",.)
+local col3 "0 0 102"
+graph hbar (asis) inventor, ///
+	over(instnm, sort(inventor) descending) ///
+    bar(1, fcolor(`col3') lcolor(`col3')) ///
+    ylabel(0(20)120, gmax) ///
+	ytitle("Inventors per 1000 Students") ///
+	${title} ///
+    yscale(range(0 120)) ymtick(##2) ///
+    legend(off) name(g1, replace)
+graph export "${figs}/top_10_colleges_innovation.${image_suffix}", replace 
+
+* Fig 6b: Patent rates vs. parent income percentile in 10 most innovative colleges
+import delimited "${data}/top10coll_inv_parinc.csv", clear
+replace par_rank_n = par_rank_n * 100
+twoway (scatter inventor par_rank_n, mcolor(navy) lcolor(maroon)) ///
+ , xt("Parents' Percentile Rank in National Income Distribution") ///
+ yt("Inventors per 1000 Students") ///
+ ${title} ///
+  ylab(0 (10) 90) yscale(range(0 90)) xlab (0(20)100) 
+graph export "${figs}/top10coll_inv_parinc.${image_suffix}", replace 
+
+* Fig 7: Patent rates vs. class-level patent rates in childhood environment
+
+* Fig 7a: Distance between father's technology class and child's technology class
+use "${data}/distance_ownddad_class_8084.dta", replace
+twoway connected density distance_rank if dist<=100, ///
+	ytitle("Inventors per Thousand") ///
+	${title} ///
+	xtitle("Distance from Father's Technology Class") ///
+	ylabel(0 "0" .2 "0.2" .4 "0.4" .6 "0.6" .8 "0.8" 1 "1", gmax) msize(vsmall)
+graph export "${figs}/distance_ownddad_class.${image_suffix}", replace
+
+
+* Fig 7b: Effect of Class-Level Patent Rates in Father’s Industry by Distance
+import delim using "${data}/naics_distance_f8_matrix_v1.csv", clear
+
+ren c1 reg_coef
+gen dist = (_n-1)*10
+
+graph bar reg_coef, ///
+	bargap(10) ///
+	over(dist, relabel(1 "0" 2 "1-10" 3 "11-20" 4 "21-30" 5 "31-40" 6 "41-50" 7 "51-60" 8 "61-70" 9 "71-80" 10 "81-90" 11 "91-100"))  ///
+	b1title("Distance Between Technology Classes") ///
+	title(" ") ///
+	ylabel(0 "0" .02 "0.02" .04 "0.04" .06 "0.06" .08 "0.08") ///
+	ytitle("Regression Coefficient on Class-Level Patent Rate")
+graph export "${figs}/Father_class_level_bydistance.${image_suffix}", replace
+
+* Fig 7c: Effect of Class-Level Patent Rates in CZ by Technological Distance
+import delim using "${data}/cz_distance_f8_matrix_v1.csv", clear
+
+ren c1 reg_coef
+gen dist = (_n-1)*10
+graph bar reg_coef, ///
+	bargap(10) ///
+	over(dist, relabel(1 "0" 2 "1-10" 3 "11-20" 4 "21-30" 5 "31-40" 6 "41-50" 7 "51-60" 8 "61-70" 9 "71-80" 10 "81-90" 11 "91-100"))  ///
+	b1title("Distance Between Technology Classes") ///
+	ylabel(0 "0" .2 "0.2" .4 "0.4" .6 "0.6" .8 "0.8" 1 "1" 1.2 "1.2") ///
+	title(" ") ///
+	ytitle("Regression Coefficient on Class-Level Patent Rate") 
+graph export "${figs}/CZ_class_level_bydistance.${image_suffix}", replace
+
+*/
+* Fig 8: Patent rates by CZ where child grew up
+* Now using online table: birth cohorts 1980-84
+
+*Fig 8a: Map of patent rates by childhood CZ
+use "C:/Users/Megha/Desktop/patents_paper_code_and_data/code_and_data/data (public online tables)/stata/table_1a.dta", clear
+rename par_cz cz
+gen share = inventor * 1000
+replace share = . if kid_count<1000
+* Share of kids excluded by restriction
+sum cz [aw=kid_count]
+local tot_kids = `r(sum_w)'
+sum cz [aw=kid_count] if kid_count<1000
+local excl_kids = `r(sum_w)'
+local pct_exc = `excl_kids'/ `tot_kids' * 100
+di `pct_exc'
+
+*maptile2 command does not exist error
+maptile share, geo(cz1990) nq(10) ///
+ *savegraph("${figs}/map_inventors.png") colorscheme("Blues") 
+ *graph save Graph "E:\Figure 8a Patent Rates by CZ.gph"
+
+************
+use "C:/Users/Megha/Desktop/patents_paper_code_and_data/code_and_data/data (public online tables)/stata/table_1a.dta", clear
+rename par_cz cz
+gen share_f = inventor * 1000
+replace share_f = . if kid_count_g_f<1000
+* Share of kids excluded by restriction
+sum cz [aw=kid_count_g_f]
+local tot_kids_f = `r(sum_w)'
+sum cz [aw=kid_count_g_f] if kid_count<1000
+local excl_kids_f = `r(sum_w)'
+local pct_exc = `excl_kids_f'/ `tot_kids_f' * 100
+di `pct_exc'
+
+*maptile2 command does not exist error
+maptile share_f, geo(cz1990) nq(10) ///
+ *savegraph("${figs}/map_inventors.png") colorscheme("Blues") 
+ *graph save Graph "E:\Figure 8a Patent Rates by CZ.gph"
+ 
+ ********************************************************************************
+ ****Regression coding, original from Megha Patel
+
+ merge 1:1 cz using "C:/Users/Megha/Desktop/patents_paper_code_and_data/code_and_data/data (public online tables)/stata/onlinedata8.dta", nogen keep(match)
+
+  global characteristics dropout_r inc_share_1perc cs_fam_wkidsinglemom gini cs_labforce cs_divorced cs_married eitc_exposure frac_middleclass gradrate_r num_inst_pc tuition rel_tot scap_ski90pcm frac_worked1416
+
+ sum inventor inventor_g_f inventor_g_m
+ foreach x of global characteristics {
+ corr inventor `x'
+ }
+/* 
+             | inventor dropou~r
+-------------+------------------
+    inventor |   1.0000
+   dropout_r |  -0.2353   1.0000
+
+(obs=709)
+
+             | inventor inc_sh~c
+-------------+------------------
+    inventor |   1.0000
+inc_share_~c |   0.0900   1.0000
+
+(obs=722)
+
+             | inventor cs_fam~m
+-------------+------------------
+    inventor |   1.0000
+cs_fam_wki~m |  -0.3987   1.0000
+
+(obs=722)
+
+             | inventor     gini
+-------------+------------------
+    inventor |   1.0000
+        gini |  -0.2782   1.0000
+
+(obs=722)
+
+             | inventor cs_lab~e
+-------------+------------------
+    inventor |   1.0000
+ cs_labforce |   0.4684   1.0000
+
+(obs=722)
+
+             | inventor cs_div~d
+-------------+------------------
+    inventor |   1.0000
+ cs_divorced |  -0.1752   1.0000
+
+(obs=722)
+
+             | inventor cs_mar~d
+-------------+------------------
+    inventor |   1.0000
+  cs_married |   0.0788   1.0000
+
+(obs=722)
+
+             | inventor eitc_e~e
+-------------+------------------
+    inventor |   1.0000
+eitc_expos~e |   0.3004   1.0000
+
+(obs=709)
+
+             | inventor frac_m~s
+-------------+------------------
+    inventor |   1.0000
+frac_middl~s |   0.3843   1.0000
+
+(obs=581)
+
+             | inventor gradra~r
+-------------+------------------
+    inventor |   1.0000
+  gradrate_r |   0.1681   1.0000
+
+(obs=584)
+
+             | inventor num_in~c
+-------------+------------------
+    inventor |   1.0000
+ num_inst_pc |  -0.0278   1.0000
+
+(obs=580)
+
+             | inventor  tuition
+-------------+------------------
+    inventor |   1.0000
+     tuition |   0.2436   1.0000
+
+(obs=722)
+
+             | inventor  rel_tot
+-------------+------------------
+    inventor |   1.0000
+     rel_tot |   0.0820   1.0000
+
+(obs=706)
+
+             | inventor scap_s~m
+-------------+------------------
+    inventor |   1.0000
+scap_ski90~m |   0.4347   1.0000
+
+(obs=709)
+
+             | inventor fra~1416
+-------------+------------------
+    inventor |   1.0000
+frac_wo~1416 |   0.5010   1.0000
+*/
+
+foreach x of global characteristics {
+ corr inventor_g_f `x'
+ }
+ /*
+              | in~r_g_f dropou~r
+-------------+------------------
+inventor_g_f |   1.0000
+   dropout_r |  -0.0587   1.0000
+
+(obs=699)
+
+             | in~r_g_f inc_sh~c
+-------------+------------------
+inventor_g_f |   1.0000
+inc_share_~c |   0.1034   1.0000
+
+(obs=699)
+
+             | in~r_g_f cs_fam~m
+-------------+------------------
+inventor_g_f |   1.0000
+cs_fam_wki~m |  -0.1732   1.0000
+
+(obs=699)
+
+             | in~r_g_f     gini
+-------------+------------------
+inventor_g_f |   1.0000
+        gini |  -0.1175   1.0000
+
+(obs=699)
+
+             | in~r_g_f cs_lab~e
+-------------+------------------
+inventor_g_f |   1.0000
+ cs_labforce |   0.3337   1.0000
+
+(obs=699)
+
+             | in~r_g_f cs_div~d
+-------------+------------------
+inventor_g_f |   1.0000
+ cs_divorced |  -0.0700   1.0000
+
+(obs=699)
+
+             | in~r_g_f cs_mar~d
+-------------+------------------
+inventor_g_f |   1.0000
+  cs_married |  -0.0600   1.0000
+
+(obs=699)
+
+             | in~r_g_f eitc_e~e
+-------------+------------------
+inventor_g_f |   1.0000
+eitc_expos~e |   0.1916   1.0000
+
+(obs=699)
+
+             | in~r_g_f frac_m~s
+-------------+------------------
+inventor_g_f |   1.0000
+frac_middl~s |   0.1758   1.0000
+
+(obs=581)
+
+             | in~r_g_f gradra~r
+-------------+------------------
+inventor_g_f |   1.0000
+  gradrate_r |   0.0543   1.0000
+
+(obs=584)
+
+             | in~r_g_f num_in~c
+-------------+------------------
+inventor_g_f |   1.0000
+ num_inst_pc |  -0.0673   1.0000
+
+(obs=580)
+
+             | in~r_g_f  tuition
+-------------+------------------
+inventor_g_f |   1.0000
+     tuition |   0.1747   1.0000
+
+(obs=699)
+
+             | in~r_g_f  rel_tot
+-------------+------------------
+inventor_g_f |   1.0000
+     rel_tot |  -0.0709   1.0000
+
+(obs=685)
+
+             | in~r_g_f scap_s~m
+-------------+------------------
+inventor_g_f |   1.0000
+scap_ski90~m |   0.2285   1.0000
+
+(obs=699)
+
+             | in~r_g_f fra~1416
+-------------+------------------
+inventor_g_f |   1.0000
+frac_wo~1416 |   0.2531   1.0000
+
+*/
+ 
+ foreach x of global characteristics {
+ sum `x' 
+ sum `x' if inventor_g_f
+ sum `x' if inventor_g_m
+ corr `x' inventor
+ corr `x' inventor_g_f
+ corr `x' inventor_g_m
+ }
+/*
+   Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+   dropout_r |        593    4.82e-11    .0220673  -.0428508   .1085964
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+   dropout_r |        384    .0014363    .0205121  -.0422779   .1085964
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+   dropout_r |        546   -.0007628    .0208461  -.0428508   .1085964
+(obs=593)
+
+             | dropou~r inventor
+-------------+------------------
+   dropout_r |   1.0000
+    inventor |  -0.2353   1.0000
+
+(obs=584)
+
+             | dropou~r in~r_g_f
+-------------+------------------
+   dropout_r |   1.0000
+inventor_g_f |  -0.0587   1.0000
+
+(obs=584)
+
+             | dropou~r in~r_g_m
+-------------+------------------
+   dropout_r |   1.0000
+inventor_g_m |  -0.2746   1.0000
+
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+inc_share_~c |        709    10.84199     5.04852      2.673     64.788
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+inc_share_~c |        488     11.2662    3.784569      3.179     29.671
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+inc_share_~c |        656    10.92846    4.605676      2.673     60.527
+(obs=709)
+
+             | inc_sh~c inventor
+-------------+------------------
+inc_share_~c |   1.0000
+    inventor |   0.0900   1.0000
+
+(obs=699)
+
+             | inc_sh~c in~r_g_f
+-------------+------------------
+inc_share_~c |   1.0000
+inventor_g_f |   0.1034   1.0000
+
+(obs=699)
+
+             | inc_sh~c in~r_g_m
+-------------+------------------
+inc_share_~c |   1.0000
+inventor_g_m |   0.0758   1.0000
+
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+cs_fam_wki~m |        741    .2017257    .0530112    .081761   .4336813
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+cs_fam_wki~m |        520    .2015564    .0474899    .081761   .3721478
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+cs_fam_wki~m |        688    .1997851    .0505323    .081761   .4336813
+(obs=722)
+
+             | cs_fam~m inventor
+-------------+------------------
+cs_fam_wki~m |   1.0000
+    inventor |  -0.3987   1.0000
+
+(obs=699)
+
+             | cs_fam~m in~r_g_f
+-------------+------------------
+cs_fam_wki~m |   1.0000
+inventor_g_f |  -0.1732   1.0000
+
+(obs=699)
+
+             | cs_fam~m in~r_g_m
+-------------+------------------
+cs_fam_wki~m |   1.0000
+inventor_g_m |  -0.4104   1.0000
+
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+        gini |        741    .4055269    .0811415     .20178     .84733
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+        gini |        520     .408202    .0787138     .20178     .68397
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+        gini |        688    .4057466    .0803561     .20178     .84733
+(obs=722)
+
+             |     gini inventor
+-------------+------------------
+        gini |   1.0000
+    inventor |  -0.2782   1.0000
+
+(obs=699)
+
+             |     gini in~r_g_f
+-------------+------------------
+        gini |   1.0000
+inventor_g_f |  -0.1175   1.0000
+
+(obs=699)
+
+             |     gini in~r_g_m
+-------------+------------------
+        gini |   1.0000
+inventor_g_m |  -0.2962   1.0000
+
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+ cs_labforce |        741    .6160395    .0595409   .3641079   .8160347
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+ cs_labforce |        520    .6260361    .0565841   .4214072   .8160347
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+ cs_labforce |        688     .619265     .057124   .4170117   .8160347
+(obs=722)
+
+             | cs_lab~e inventor
+-------------+------------------
+ cs_labforce |   1.0000
+    inventor |   0.4684   1.0000
+
+(obs=699)
+
+             | cs_lab~e in~r_g_f
+-------------+------------------
+ cs_labforce |   1.0000
+inventor_g_f |   0.3337   1.0000
+
+(obs=699)
+
+             | cs_lab~e in~r_g_m
+-------------+------------------
+ cs_labforce |   1.0000
+inventor_g_m |   0.4991   1.0000
+
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+ cs_divorced |        741    .0966486    .0179508   .0395041   .1903485
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+ cs_divorced |        520    .0975603    .0171588   .0422682   .1903485
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+ cs_divorced |        688     .096964    .0179385   .0395041   .1903485
+(obs=722)
+
+             | cs_div~d inventor
+-------------+------------------
+ cs_divorced |   1.0000
+    inventor |  -0.1752   1.0000
+
+(obs=699)
+
+             | cs_div~d in~r_g_f
+-------------+------------------
+ cs_divorced |   1.0000
+inventor_g_f |  -0.0700   1.0000
+
+(obs=699)
+
+             | cs_div~d in~r_g_m
+-------------+------------------
+ cs_divorced |   1.0000
+inventor_g_m |  -0.1620   1.0000
+
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+  cs_married |        741    .5744574    .0468752   .3729193   .6947249
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+  cs_married |        520    .5712431    .0413853   .4249592   .6850649
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+  cs_married |        688    .5755586    .0437713   .4023101   .6850649
+(obs=722)
+
+             | cs_mar~d inventor
+-------------+------------------
+  cs_married |   1.0000
+    inventor |   0.0788   1.0000
+
+(obs=699)
+
+             | cs_mar~d in~r_g_f
+-------------+------------------
+  cs_married |   1.0000
+inventor_g_f |  -0.0600   1.0000
+
+(obs=699)
+
+             | cs_mar~d in~r_g_m
+-------------+------------------
+  cs_married |   1.0000
+inventor_g_m |   0.0807   1.0000
+
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+eitc_expos~e |        741     1.33402     3.82702          0   21.33333
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+eitc_expos~e |        520    1.576535    4.118322          0   21.33333
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+eitc_expos~e |        688    1.422597    3.955363          0   21.33333
+(obs=722)
+
+             | eitc_e~e inventor
+-------------+------------------
+eitc_expos~e |   1.0000
+    inventor |   0.3004   1.0000
+
+(obs=699)
+
+             | eitc_e~e in~r_g_f
+-------------+------------------
+eitc_expos~e |   1.0000
+inventor_g_f |   0.1916   1.0000
+
+(obs=699)
+
+             | eitc_e~e in~r_g_m
+-------------+------------------
+eitc_expos~e |   1.0000
+inventor_g_m |   0.3381   1.0000
+
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+frac_middl~s |        709    .5499499     .078642      .2848     .73376
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+frac_middl~s |        488    .5507728    .0729167      .3013     .73376
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+frac_middl~s |        656    .5534613     .075192     .28739     .73376
+(obs=709)
+
+             | frac_m~s inventor
+-------------+------------------
+frac_middl~s |   1.0000
+    inventor |   0.3843   1.0000
+
+(obs=699)
+
+             | frac_m~s in~r_g_f
+-------------+------------------
+frac_middl~s |   1.0000
+inventor_g_f |   0.1758   1.0000
+
+(obs=699)
+
+             | frac_m~s in~r_g_m
+-------------+------------------
+frac_middl~s |   1.0000
+inventor_g_m |   0.4158   1.0000
+
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+  gradrate_r |        581   -9.37e-11    .1360975  -.3503191   .5278704
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+  gradrate_r |        447    .0016242    .1330575  -.3503191   .4733513
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+  gradrate_r |        557    .0026218    .1364548  -.3503191   .5278704
+(obs=581)
+
+             | gradra~r inventor
+-------------+------------------
+  gradrate_r |   1.0000
+    inventor |   0.1681   1.0000
+
+(obs=581)
+
+             | gradra~r in~r_g_f
+-------------+------------------
+  gradrate_r |   1.0000
+inventor_g_f |   0.0543   1.0000
+
+(obs=581)
+
+             | gradra~r in~r_g_m
+-------------+------------------
+  gradrate_r |   1.0000
+inventor_g_m |   0.1814   1.0000
+
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+ num_inst_pc |        584    .0231421    .0216806   .0008879   .2431611
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+ num_inst_pc |        443     .019054    .0140139   .0008879   .1160991
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+ num_inst_pc |        558    .0211877    .0173578   .0008879   .1961746
+(obs=584)
+
+             | num_in~c inventor
+-------------+------------------
+ num_inst_pc |   1.0000
+    inventor |  -0.0278   1.0000
+
+(obs=584)
+
+             | num_in~c in~r_g_f
+-------------+------------------
+ num_inst_pc |   1.0000
+inventor_g_f |  -0.0673   1.0000
+
+(obs=584)
+
+             | num_in~c in~r_g_m
+-------------+------------------
+ num_inst_pc |   1.0000
+inventor_g_m |  -0.0189   1.0000
+
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+     tuition |        580    4354.724    3731.221          0      24619
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+     tuition |        443    4591.416    3661.265          0      24619
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+     tuition |        555    4397.285    3671.969          0      24619
+(obs=580)
+
+             |  tuition inventor
+-------------+------------------
+     tuition |   1.0000
+    inventor |   0.2436   1.0000
+
+(obs=580)
+
+             |  tuition in~r_g_f
+-------------+------------------
+     tuition |   1.0000
+inventor_g_f |   0.1747   1.0000
+
+(obs=580)
+
+             |  tuition in~r_g_m
+-------------+------------------
+     tuition |   1.0000
+inventor_g_m |   0.2390   1.0000
+
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+     rel_tot |        741    .5455522    .1671596   .1104931   1.308379
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+     rel_tot |        520    .5266271    .1567644   .1104931   1.308379
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+     rel_tot |        688    .5427919    .1645813   .1104931   1.308379
+(obs=722)
+
+             |  rel_tot inventor
+-------------+------------------
+     rel_tot |   1.0000
+    inventor |   0.0820   1.0000
+
+(obs=699)
+
+             |  rel_tot in~r_g_f
+-------------+------------------
+     rel_tot |   1.0000
+inventor_g_f |  -0.0709   1.0000
+
+(obs=699)
+
+             |  rel_tot in~r_g_m
+-------------+------------------
+     rel_tot |   1.0000
+inventor_g_m |   0.0670   1.0000
+
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+scap_ski90~m |        722    .1716384    1.295342  -3.198993    7.30545
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+scap_ski90~m |        508     .168414    1.296322  -2.687323    7.30545
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+scap_ski90~m |        671    .1801254    1.300508  -3.198993    7.30545
+(obs=706)
+
+             | scap_s~m inventor
+-------------+------------------
+scap_ski90~m |   1.0000
+    inventor |   0.4347   1.0000
+
+(obs=685)
+
+             | scap_s~m in~r_g_f
+-------------+------------------
+scap_ski90~m |   1.0000
+inventor_g_f |   0.2285   1.0000
+
+(obs=685)
+
+             | scap_s~m in~r_g_m
+-------------+------------------
+scap_ski90~m |   1.0000
+inventor_g_m |   0.4817   1.0000
+
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+frac_wo~1416 |        709    .0048309     .001369   .0016615   .0080788
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+frac_wo~1416 |        488    .0048093    .0012818   .0020433   .0078443
+
+    Variable |        Obs        Mean    Std. Dev.       Min        Max
+-------------+---------------------------------------------------------
+frac_wo~1416 |        656    .0048425    .0013547   .0016615   .0080788
+(obs=709)
+
+             | fra~1416 inventor
+-------------+------------------
+frac_wo~1416 |   1.0000
+    inventor |   0.5010   1.0000
+
+(obs=699)
+
+             | fra~1416 in~r_g_f
+-------------+------------------
+frac_wo~1416 |   1.0000
+inventor_g_f |   0.2531   1.0000
+
+(obs=699)
+
+             | fra~1416 in~r_g_m
+-------------+------------------
+frac_wo~1416 |   1.0000
+inventor_g_m |   0.5316   1.0000
+
+
+
+*/
+ 
+ reg inventor $characteristics
+ /*
+      Source |       SS           df       MS      Number of obs   =       466
+-------------+----------------------------------   F(15, 450)      =     36.52
+       Model |  .000314332        15  .000020955   Prob > F        =    0.0000
+    Residual |  .000258235       450  5.7386e-07   R-squared       =    0.5490
+-------------+----------------------------------   Adj R-squared   =    0.5340
+       Total |  .000572567       465  1.2313e-06   Root MSE        =    .00076
+
+--------------------------------------------------------------------------------------
+            inventor |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+---------------------+----------------------------------------------------------------
+           dropout_r |  -.0022581   .0022862    -0.99   0.324    -.0067511     .002235
+     inc_share_1perc |   .0000437   .0000178     2.46   0.014     8.72e-06    .0000787
+cs_fam_wkidsinglemom |  -.0107876   .0016204    -6.66   0.000    -.0139722    -.007603
+                gini |  -.0021952   .0014157    -1.55   0.122    -.0049774     .000587
+         cs_labforce |   .0025408   .0009364     2.71   0.007     .0007004    .0043811
+         cs_divorced |  -.0039297   .0029416    -1.34   0.182    -.0097107    .0018513
+          cs_married |  -.0095495    .001654    -5.77   0.000       -.0128   -.0062991
+       eitc_exposure |   .0000178   .0000106     1.68   0.094    -3.06e-06    .0000386
+    frac_middleclass |  -.0024652   .0011186    -2.20   0.028    -.0046634   -.0002669
+          gradrate_r |  -.0008451    .000341    -2.48   0.014    -.0015152   -.0001749
+         num_inst_pc |  -.0044174   .0020982    -2.11   0.036    -.0085408   -.0002939
+             tuition |   3.80e-08   1.09e-08     3.50   0.001     1.67e-08    5.94e-08
+             rel_tot |  -.0011181   .0003127    -3.58   0.000    -.0017326   -.0005036
+       scap_ski90pcm |   .0002188   .0000565     3.88   0.000     .0001079    .0003298
+     frac_worked1416 |   .1635492   .0530918     3.08   0.002     .0592106    .2678878
+               _cons |   .0096981   .0016577     5.85   0.000     .0064402    .0129559
+--------------------------------------------------------------------------------------
+*/
+ reg inventor_g_f $characteristics
+/* 
+-------------+----------------------------------   F(15, 450)      =     11.88
+       Model |  .000031102        15  2.0735e-06   Prob > F        =    0.0000
+    Residual |  .000078555       450  1.7457e-07   R-squared       =    0.2836
+-------------+----------------------------------   Adj R-squared   =    0.2598
+       Total |  .000109657       465  2.3582e-07   Root MSE        =    .00042
+
+--------------------------------------------------------------------------------------
+        inventor_g_f |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+---------------------+----------------------------------------------------------------
+           dropout_r |  -.0002908    .001261    -0.23   0.818    -.0027689    .0021873
+     inc_share_1perc |   .0000288   9.82e-06     2.94   0.003     9.53e-06    .0000481
+cs_fam_wkidsinglemom |  -.0027319   .0008937    -3.06   0.002    -.0044884   -.0009755
+                gini |  -.0020095   .0007808    -2.57   0.010     -.003544    -.000475
+         cs_labforce |   .0015024   .0005165     2.91   0.004     .0004874    .0025174
+         cs_divorced |  -.0033683   .0016224    -2.08   0.038    -.0065567   -.0001798
+          cs_married |  -.0024998   .0009122    -2.74   0.006    -.0042926    -.000707
+       eitc_exposure |  -8.95e-07   5.85e-06    -0.15   0.878    -.0000124    .0000106
+    frac_middleclass |  -.0014716   .0006169    -2.39   0.017     -.002684   -.0002591
+          gradrate_r |  -.0003441   .0001881    -1.83   0.068    -.0007137    .0000256
+         num_inst_pc |  -.0006174   .0011572    -0.53   0.594    -.0028917    .0016568
+             tuition |   2.11e-08   5.99e-09     3.53   0.000     9.37e-09    3.29e-08
+             rel_tot |  -.0007264   .0001725    -4.21   0.000    -.0010653   -.0003874
+       scap_ski90pcm |   .0000607   .0000311     1.95   0.052    -5.07e-07    .0001219
+     frac_worked1416 |   .0083438   .0292823     0.28   0.776    -.0492032    .0658908
+               _cons |    .003535   .0009143     3.87   0.000     .0017382    .0053318
+--------------------------------------------------------------------------------------
+*/
+
+
+reg inventor_g_f cs_fam_wkidsinglemom cs_divorced cs_married
+/*
+      Source |       SS           df       MS      Number of obs   =       699
+-------------+----------------------------------   F(3, 695)       =     25.84
+       Model |  .000021893         3  7.2975e-06   Prob > F        =    0.0000
+    Residual |  .000196303       695  2.8245e-07   R-squared       =    0.1003
+-------------+----------------------------------   Adj R-squared   =    0.0965
+       Total |  .000218196       698  3.1260e-07   Root MSE        =    .00053
+
+--------------------------------------------------------------------------------------
+        inventor_g_f |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+---------------------+----------------------------------------------------------------
+cs_fam_wkidsinglemom |  -.0049198   .0005894    -8.35   0.000    -.0060771   -.0037625
+         cs_divorced |   .0006568   .0012632     0.52   0.603    -.0018233    .0031369
+          cs_married |  -.0047054   .0006391    -7.36   0.000    -.0059602   -.0034506
+               _cons |   .0041735   .0004548     9.18   0.000     .0032805    .0050665
+--------------------------------------------------------------------------------------
+*/
+
+reg inventor cs_fam_wkidsinglemom cs_divorced cs_married 
+/*
+      Source |       SS           df       MS      Number of obs   =       722
+-------------+----------------------------------   F(3, 718)       =     78.10
+       Model |  .000288181         3   .00009606   Prob > F        =    0.0000
+    Residual |  .000883091       718  1.2299e-06   R-squared       =    0.2460
+-------------+----------------------------------   Adj R-squared   =    0.2429
+       Total |  .001171272       721  1.6245e-06   Root MSE        =    .00111
+
+--------------------------------------------------------------------------------------
+            inventor |      Coef.   Std. Err.      t    P>|t|     [95% Conf. Interval]
+---------------------+----------------------------------------------------------------
+cs_fam_wkidsinglemom |  -.0171171   .0012017   -14.24   0.000    -.0194764   -.0147578
+         cs_divorced |  -.0001772   .0025301    -0.07   0.944    -.0051446    .0047901
+          cs_married |  -.0116129   .0012846    -9.04   0.000    -.0141349   -.0090909
+               _cons |   .0118537   .0009157    12.95   0.000      .010056    .0136514
+--------------------------------------------------------------------------------------
+*/
+ 
+ * Fig 8b: Bar chart of top 10 and bottom 10 CZs per innovation rates
+use "C:/Users/Megha/Desktop/patents_paper_code_and_data/code_and_data/data (public online tables)/stata/table_1a.dta", clear
+
+*merge in the CZ names and size
+rename par_cz cz
+merge 1:1 cz using "C:/Users/Megha/Desktop/patents_paper_code_and_data/code_and_data/data (public online tables)/stata/onlinedata8.dta", nogen keep(match)
+gen cz_lab=czname + ", " + stateabbrv
+
+* Keep 100 largest CZs and sort by share of inventors
+gsort - pop2000
+keep in 1/100
+gsort -inventor
+gen rank=_n
+replace inventor=inventor*1000
+
+* Generate figure
+local col2 "126 183 239"
+local col3 "0 0 102"
+graph hbar (asis) inventor if rank<=10, ///
+	over(cz_lab, sort(inventor) descending) ///
+    bar(1, fcolor(`col3') lcolor(`col3')) ///
+    ylabel(0(1)6, gmax) ///
+	ytitle("Inventors per 1000 Children") ///
+	title("{bf:Top 10}"" ", size(normal)) ///
+    yscale(range(0 6)) ymtick(##2) ///
+	name(g1, replace)
+graph hbar (asis) inventor if rank>90, ///
+	over(cz_lab, sort(inventor) descending) ///
+    bar(1, fcolor(`col2') lcolor(`col2')) ///
+    ylabel(0(1)6, gmax) ///
+	ytitle("Inventors per 1000 Children") ///
+	title("{bf:Bottom 10}"" ", size(normal)) ///
+    yscale(range(0 6)) ymtick(##2) ///
+    legend(off) name(g2, replace)
+graph combine g1 g2
+graph export "${figs}/top_bottom_10_cz_by_innovation.${image_suffix}", replace 
+
+* Fig 9: Patent rates of children and adults in CZ
+* Now using online table: birth cohorts 1980-84
+use "${data}/patents_by_cz", clear
+rename par_cz cz
+
+* Merge in the Annual Patent Rate per Thousand Working Age Adult
+merge 1:1 cz using "${data}/czpatentingintensity.dta", nogen
+* Merge in the CZ names and size
+merge 1:1 cz using "${data}/cz_name_pop.dta", nogen
+
+gen inventor_1k =inventor*1000
+gen inventor_p_1k = patentspercap*1000
+
+* Keep 100 largest CZs
+gsort -pop2000
+g pop_rank = _n
+keep if pop_rank <= 100
+
+* Labels
+gen label=1 if inlist(czname, ///
+ "Madison", "Houston", "Minneapolis", "Newark", "San Jose", "Brownsville")
+replace label = 1 if cz == 20100
+
+* Variable for repositioning of CZ labels in scatter plot
+gen pos=3
+replace pos=9 if czname=="San Jose"
+replace pos=5 if czname=="Houston"  
+replace pos=4 if czname == "Brownsville"
+replace pos=12 if czname=="Portland"
+
+twoway (scatter inventor_1k inventor_p_1k if label==1, mlabv(pos) mlabel(czname)) ///
+(scatter inventor_1k inventor_p_1k, mc(navy)) ///
+(lfit inventor_1k inventor_p_1k, lc(maroon)), ///
+	ylabel(0(1)6, gmax)  ///
+	${title} ///
+	xlabel(0 "0" .2 "0.2" .4 "0.4" .6 "0.6" .8 "0.8" ) ///
+	xtitle("Annual Patent Rate per Thousand Working Age Adults in CZ") ///
+	ytitle("Num. of Inventors per 1000 Children who Grow up in CZ") ///
+	legend(off) 
+graph export "${figs}/inventors_by_par_cz.${image_suffix}", replace 
+
+* Fig 10: Percent of female inventors by origin
+* Fig 10a: Percent of female inventors by state where child grew up
+* Now using online table: birth cohorts 1980-84
+use "C:/Users/Megha/Desktop/patents_paper_code_and_data/code_and_data/data (public online tables)/stata/table_1b.dta", clear
+gen num_f = inventor_g_f * kid_count_g_f
+gen num_m = inventor_g_m * kid_count_g_m
+gen num_inv = num_f + num_m
+gen share_f = num_f / (num_inv)
+replace share_f = 100* share_f
+rename par_state state
+label drop _all
+maptile share_f, geo(state) ///
+colorscheme("Blues")  cutvalues(0 5 14.7 16.8 18.4 20.4 25)  ///
+ legdecimals(1) savegraph("${figs}/map_female_inventors.png")
+
+
+* Fig 10b: Top 10/Bottom 10 CZ for Share Female Inventors
+* Now using online table: birth cohorts 1980-84
+use "${data}/patents_by_cz", clear
+
+*merge in the CZ names and population
+rename par_cz cz
+merge 1:1 cz using "${data}/cz_name_pop.dta", nogen keep(match)
+gen cz_lab=czname + ", " + stateabbrv
+
+* Keep 100 largest CZs and sort by share of female inventors
+gsort - pop2000
+keep in 1/100
+gen num_f = inventor_g_f * kid_count_g_f
+gen num_m = inventor_g_m * kid_count_g_m
+gen num_inv = num_f + num_m
+gen share_f = num_f / (num_inv)
+gsort -share_f
+replace share_f=share_f*100
+gen rank = _n
+
+* Generate figure
+local col2 "126 183 239"
+local col3 "0 0 102"
+graph hbar (asis) share_f if rank<=10, ///
+	over(cz_lab, sort(share_f) descending) ///
+    bar(1, fcolor(`col3') lcolor(`col3')) ///
+    ylabel(0(10)50, gmax) ///
+	ytitle("Female Inventor Share (%)") ///
+	title("{bf:Top 10}"" ", size(normal)) ///
+    yscale(range(0 50)) ymtick(##2) ///
+    legend(off) name(g1, replace)
+graph hbar (asis) share_f if rank>90, ///
+	over(cz_lab, sort(share_f) descending) ///
+    bar(1, fcolor(`col2') lcolor(`col2')) ///
+    ylabel(0(10)50, gmax) ///
+	ytitle("Female Inventor Share (%)") ///
+	title("{bf:Bottom 10}"" ", size(normal)) ///
+    yscale(range(0 50)) ymtick(##2) ///
+    legend(off) name(g2, replace)
+graph combine g1 g2
+graph export "${figs}/top_bottom_10_cz_by_femaleshare.${image_suffix}", replace 
+
+* Figure 11: Income and Citations of Inventors by Characteristics at Birth
+
+* Fig 11a: Mean Income
+use "${data}/cittop5_by_female.dta", clear
+gen inc_mean   = f1040_inc_mean / 1000
+gen inc_semean = f1040_inc_semean / 1000 
+tempfile female
+save `female'
+
+use "${data}/cittop5_by_p80.dta", clear
+gen inc_mean   = f1040_inc_mean / 1000
+gen inc_semean = f1040_inc_semean / 1000 
+tempfile p80
+save `p80'
+
+use "${data}/hhjkpredictions.dta", clear
+gen group      = "Minority"     if minority == 1
+replace group  = "Non-Minority" if minority == 0
+gen inc_mean   = f1040_inc_mean / 1000
+gen inc_semean = f1040_inc_semean / 1000 
+keep if minority != .
+append using `female' `p80'
+
+generate x_place = 0
+replace  x_place = 1.7 if female == 1 | minority == 1 | p80 == 0
+replace  x_place = x_place + 5 if minority != .
+replace  x_place = x_place + 10 if female != .
+
+generate inc_mean_high = inc_mean + 1.96 * inc_semean
+generate inc_mean_low  = inc_mean - 1.96 * inc_semean
+
+gen x_place_2 = x_place - 0.42
+gen y_place = inc_mean / 2
+format inc_mean %12.0f
+
+twoway (bar inc_mean x_place if p80 == 1 | female == 0 | minority == 0, color(navy) fintensity(full)) ///
+(bar inc_mean x_place if p80 == 0 | female == 1 | minority == 1, color(maroon) fintensity(full)) ///
+(rcap inc_mean_high inc_mean_low x_place, lcolor(black)) ///
+(scatter y_place x_place_2, msymbol(none) mlabel(inc_mean) mlabcolor(white)), ///
+       xlabel(-.2 `""Par Inc." "Above p80""' 1.8 `""Par Inc." "Below p80""' 4.9 "Non-Minority" 6.8 "Minority" 10 "Male" 11.7 "Female", noticks) ///
+       ${title} ///
+	   legend(off) ///
+	   graphregion(fcolor(white)) ///
+	   ytitle("Mean Income in 2012 ($1000)")
+graph export "${figs}/inv_inc_bygenderminorityparinc.${image_suffix}", replace 
+
+* Fig 11b: Fraction with Highly-Cited Patents
+use "${data}/cittop5_by_female.dta", clear
+
+gen top5_fcit_mean = cittop5_mean * 100
+gen top5_fcit_semean = cittop5_semean * 100
+tempfile female
+save `female'
+
+use "${data}/cittop5_by_p80.dta", clear
+
+gen top5_fcit_mean = cittop5_mean * 100
+gen top5_fcit_semean = cittop5_semean * 100
+tempfile p80
+save `p80'
+
+use "${data}/hhjkpredictions.dta", clear
+gen group = "Minority" if minority == 1
+replace group = "Non-Minority" if minority == 0
+gen top5_fcit_mean = cittop5_mean *100
+gen top5_fcit_semean = cittop5_semean*100
+keep if minority != .
+append using `female' `p80'
+
+generate x_place = 0
+replace x_place = 1.7 if female == 1 | minority == 1 | p80 == 0
+replace x_place = x_place + 5 if minority != .
+replace x_place = x_place + 10 if female != .
+
+generate top5_fcit_high = top5_fcit_mean + 1.96 * top5_fcit_semean
+generate top5_fcit_low = top5_fcit_mean - 1.96 * top5_fcit_semean
+replace top5_fcit_low  = 0 if top5_fcit_low < 0
+
+gen x_place_2 = x_place - 0.32
+gen y_place = top5_fcit_mean / 2
+format top5_fcit_mean %12.1f
+
+twoway (bar top5_fcit_mean x_place if p80 == 1 | female == 0 | minority == 0, color(navy) fintensity(full)) ///
+(bar top5_fcit_mean x_place if p80 == 0 | female == 1 | minority == 1, color(maroon) fintensity(full)) ///
+(rcap top5_fcit_high top5_fcit_low x_place, lcolor(black)) (scatter y_place x_place_2, msymbol(none) mlabel(top5_fcit_mean) mlabcolor(white)), ///
+       xlabel(-.2 `""Par Inc." "Above p80""' 1.8 `""Par Inc." "Below p80""' 4.9 "Non-Minority" 6.8 "Minority" 10 "Male" 11.7 "Female", noticks) ///
+	   ylabel(, format(%1.0f)) ///
+	   legend(off) ///
+	   ${title} ///
+	   graphregion(fcolor(white)) ///
+	   ytitle("Pct. of Inventors in Top 5% of Citation Distribution")
+graph export "${figs}/inventors_top5_bygenderminorityparinc.${image_suffix}", replace 
+
+
+/*
+*Figs Appendix
+ Figure A1
+
+* Fig A1a: Patent Rates Between Ages 30-40 vs. Parent Income Percentile
+import delimited using "${data}/inventor3040_on_parinc.csv", clear
+replace inventor3040 = inventor3040 * 1000
+twoway (connected inventor3040 par_rank_w, mcolor(navy)), ///
+	xtitle("Parent Household Income Percentile") ///
+	ytitle("Inventors Between Ages 30-40 per Thousand") ///
+	title(" ") ///
+	xlabel(0 "0" .2 "20" .4 "40" .6 "60" .8 "80" 1 "100")
+graph export "${figs}/inventor3040_on_parinc.${image_suffix}", replace 
+
+
+* Fig A1b: Parental income and alternative measures of inventor status 
+use "${data}/inventor_on_par_inc8084.dta", clear
+
+replace inventor = inventor * 1000
+replace applicant = applicant * 1000
+replace grantee = grantee * 1000
+
+twoway (scatter inventor  par_bin, msymbol (circle) mcolor(navy) lcolor(maroon)) ///
+(scatter applicant  par_bin, msymbol(triangle_hollow) mcolor(maroon)) ///
+(scatter grantee par_bin, msymbol(square_hollow) mcolor(forest_green)), ///
+	xtitle("Parent Household Income Percentile") ///
+	ytitle("Inventors/Applicants/Grantees per Thousand") /// 
+	title(" ") ///
+	legend(lab(1 "Inventors") lab(2 "Applicants") lab(3 "Grantees") c(3)) 
+graph export "${figs}/inventor_on_parinc_alternative.${image_suffix}", replace
+
+* Fig A1c: Patent Rates vs. Parent Income in NYC Public Schools
+import delimited using "${data}/inventorvsparinc_nyc.csv", clear
+
+replace par_rank = par_rank * 100
+replace inventor = inventor * 1000
+
+twoway (connected inventor par_rank, mcolor(navy) lcolor(navy)), ///
+	xtitle("Parent Household Income Percentile") ///
+	title(" ") ///
+	ytitle("Inventors per Thousand")
+graph export "${figs}/inventor_on_parinc_nyc.${image_suffix}", replace 
+
+
+* Fig A2: Probability of child ending up in top 1% and 5% in relation to parent income 
+use "${data}/inventor_on_par_inc8084.dta", clear
+replace top1pc = top1pc * 100
+replace top5pc = top5pc * 100
+twoway (scatter top5pc par_bin, msize(small) mcolor(maroon)) ///
+(scatter top1pc par_bin, msize(small) mcolor(navy) yaxis(2) msymbol (triangle)),  ///
+	xtitle("Parent Household Income Percentile") ///
+	ytitle("Percentage of Children with Income in Top 5%", axis(1)) ///
+	ytitle("Percentage of Children with Income in Top 1%", axis(2)) ///
+	title(" ") ///
+	legend(order(1 "Income in Top 5%" 2 "Income in Top 1%" ))
+graph export "${figs}/top_income_on_parinc.${image_suffix}", replace 
+
+* Fig A3: Distribution of math test scores
+
+* Fig A3a: Grade 3 math scores by parent income
+graph use "${data}/mathkd_byparinc.gph"
+graph play "${recordings}/take_out_blue_border.grec"
+graph play "${recordings}/edit_figA3a.grec"
+graph export "${figs}/mathkd_byparinc.${image_suffix}", replace
+graph close
+
+* Fig A3.b: Grade 3 math test scores, by gender
+graph use "${data}/mathkd_bygender.gph"
+graph play "${recordings}/take_out_blue_border.grec"
+graph play "${recordings}/edit_figA3b.grec"
+graph export "${figs}/mathkd_bygender.${image_suffix}", replace
+graph close
+
+* Fig A4: Percentage of Female Inventors and Gender Stereotypes 
+use "${data}/patents_by_state", clear
+*/
+* Generate Share females
+gen num_f = inventor_g_f * kid_count_g_f
+gen num_m = inventor_g_m * kid_count_g_m
+gen num_inv = num_f + num_m
+gen share_f = num_f / (num_inv)
+replace share_f = 100* share_f
+
+* Merge with Pope and Sydnor data and FIPS codes
+rename par_stateabbrv state
+merge 1:1 state using "${data}/Pope_Sydnor_JEP_statedata.dta", nogen 
+rename state stateabbrv
+merge 1:1 stateabbrv using "$data/FIPS_state_cw.dta", nogen
+drop if fips==.
+drop if fips > 56
+
+twoway (scatter share_f Avg95_SAI, mlabel(stateabbrv) mlabposition(0) msymbol(i)) ///
+(lfit share_f Avg95_SAI), ///
+	xtitle("Gender Stereotype Adherence Index on 8th Grade Tests (Pope and Sydnor 2010)", size(3)) ///
+	ytitle("Percentage of Inventors who are Female") ///
+	title(" ") ///
+	xlab(,format(%9.1f)) ///
+	legend(off)
+graph export "${figs}/inventors_bystategender.${image_suffix}", replace 
+
+* Fig A5: Income of Inventors
+
+* Fig A5a: Distribution of inventors' mean individual income between ages 40-50
+graph use "${data}/mean_non_spouse_kd_2to99.gph"
+graph play "${recordings}/take_out_blue_border.grec"
+graph play "${recordings}/edit_figA6.grec"
+graph export "${figs}/mean_inc_kd.${image_suffix}", replace
+graph close
+
+* Fig A5b: Income vs number of citations
+use "${data}/mean_non_spouse_on_fcit_1996_21bins.dta", clear
+gen weight = 5
+replace weight = 1 if fcit_bin == 21
+replace weight = 4 if fcit_bin == 20
+reg   mean_non_spouse fcit_1996 [aw=weight]
+local cons       = _b[_cons]
+local slope      = _b[fcit_1996]
+local slope_3    : di %04.3f `slope'
+local se_slope   = _se[fcit_1996]
+local se_slope_3 : di %04.3f `se_slope'
+sum   fcit_1996, meanonly
+local min_fcit = `r(min)'
+local max_fcit = `r(max)'
+twoway (scatter mean_non_spouse fcit_1996, mcolor(navy) lcolor(maroon)) ///
+(function `slope'*x+`cons', range(`min_fcit' `max_fcit') lcolor(maroon)), ///
+	text(680 450 "Slope : `slope_3'" "            (`se_slope_3')") ///
+	graphregion(fcolor(white)) ///
+	xtitle("Number of Citations") ///
+	ytitle("Mean Annual Income Between Ages 40-50 ($1000)") ///
+	legend(off) ///
+	${title} ///
+	ylabel(200(200)1200)
+graph export "${figs}/income_on_citations.${image_suffix}", replace
+
+
